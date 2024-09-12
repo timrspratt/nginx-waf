@@ -26,6 +26,11 @@ static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *c
 static void *ngx_http_waf_create_loc_conf(ngx_conf_t *cf);
 static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf);
 
+static bool eval_condition(ngx_http_request_t *r, const char *condition);
+static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *expression);
+static bool check_user_agent(ngx_http_request_t *r, const char *value);
+static bool check_ip(ngx_http_request_t *r, const char *value);
+
 static ngx_command_t ngx_http_waf_commands[] = {
     {
         ngx_string("waf_rule"),
@@ -130,10 +135,11 @@ static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
         return NGX_DECLINED;
     }
 
-    ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
-    ngx_str_t *user_agent = user_agent_header ? &user_agent_header->value : NULL;
+    char expression[conf->expression.len + 1];
+    ngx_memcpy(expression, conf->expression.data, conf->expression.len);
+    expression[conf->expression.len] = '\0';
 
-    if (user_agent) {
+    if (parse_and_evaluate_expression(r, expression)) {
         return serve_response(r, conf);
     }
 
@@ -153,4 +159,68 @@ static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf) {
     *h = ngx_http_waf_handler;
 
     return NGX_OK;
+}
+
+static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *expression) {
+    char *expr_copy = ngx_pstrdup(r->pool, expression);
+    char *token = strtok(expr_copy, " ");
+
+    bool result = false;
+    bool current_value = false;
+    char *operator = NULL;
+
+    while (token != NULL) {
+        if (strcmp(token, "or") == 0 || strcmp(token, "and") == 0) {
+            operator = token;
+        } else if (token[0] == '(') {
+            current_value = eval_condition(r, token);
+            if (operator == NULL) {
+                result = current_value;
+            } else if (strcmp(operator, "or") == 0) {
+                result = result || current_value;
+            } else if (strcmp(operator, "and") == 0) {
+                result = result && current_value;
+            }
+        }
+
+        token = strtok(NULL, " ");
+    }
+
+    return result;
+}
+
+static bool eval_condition(ngx_http_request_t *r, const char *condition) {
+    char *cond_copy = ngx_pstrdup(r->pool, condition + 1);
+    cond_copy[strlen(cond_copy) - 1] = '\0';
+
+    if (strstr(cond_copy, "http.user_agent contains") != NULL) {
+        char *value = strstr(cond_copy, "\"") + 1;
+        value[strlen(value) - 1] = '\0';
+        return check_user_agent(r, value);
+    } else if (strstr(cond_copy, "ip.src eq") != NULL) {
+        char *value = strstr(cond_copy, "eq") + 3;
+        return check_ip(r, value);
+    }
+
+    return false;
+}
+
+static bool check_user_agent(ngx_http_request_t *r, const char *value) {
+    ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
+    ngx_str_t *user_agent = user_agent_header ? &user_agent_header->value : NULL;
+
+    if (user_agent && ngx_strcasestrn(user_agent->data, (u_char *)value, ngx_strlen(value) - 1) != NULL) {
+        return true;
+    }
+    return false;
+}
+
+static bool check_ip(ngx_http_request_t *r, const char *value) {
+    ngx_str_t remote_addr = r->connection->addr_text;
+
+    if (ngx_strcmp(remote_addr.data, value) == 0) {
+        return true;
+    }
+
+    return false;
 }
