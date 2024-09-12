@@ -164,6 +164,10 @@ static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf) {
 }
 
 static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *expression) {
+    bool result = false;
+    bool current_value = false;
+    char *operator = NULL;
+
     char *expr = ngx_pnalloc(r->pool, strlen(expression) + 1);
     if (expr == NULL) {
         return false;
@@ -171,16 +175,16 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
 
     ngx_memcpy(expr, expression, strlen(expression) + 1);
 
-    char *token = strtok(expr, " ");
-
-    bool result = false;
-    bool current_value = false;
-    char *operator = NULL;
+    char *token = strtok(expr, "()");
 
     while (token != NULL) {
-        if (strcmp(token, "or") == 0 || strcmp(token, "and") == 0) {
+        while (isspace(*token)) token++;
+        char *end = token + strlen(token) - 1;
+        while (end > token && isspace(*end)) *end-- = '\0';
+
+        if (strncmp(token, "or", 2) == 0 || strncmp(token, "and", 3) == 0) {
             operator = token;
-        } else if (token[0] == '(') {
+        } else {
             current_value = eval_condition(r, token);
             if (operator == NULL) {
                 result = current_value;
@@ -190,28 +194,19 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
                 result = result && current_value;
             }
         }
-
-        token = strtok(NULL, " ");
+        token = strtok(NULL, "()");
     }
 
     return result;
 }
 
 static bool eval_condition(ngx_http_request_t *r, const char *condition) {
-    char *cond = ngx_pnalloc(r->pool, strlen(condition));
-    if (cond == NULL) {
-        return false;
-    }
-
-    ngx_memcpy(cond, condition + 1, strlen(condition) - 2);
-    cond[strlen(condition) - 2] = '\0';
-
-    if (strstr(cond, "http.user_agent contains") != NULL) {
-        char *value = strstr(cond, "\"") + 1;
+    if (strstr(condition, "http.user_agent contains") != NULL) {
+        char *value = strstr(condition, "\"") + 1;
         value[strlen(value) - 1] = '\0';
         return check_user_agent(r, value);
-    } else if (strstr(cond, "ip.src eq") != NULL) {
-        char *value = strstr(cond, "eq") + 3;
+    } else if (strstr(condition, "ip.src eq") != NULL) {
+        char *value = strstr(condition, "eq") + 3;
         return check_ip(r, value);
     }
 
