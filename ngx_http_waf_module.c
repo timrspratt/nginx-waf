@@ -164,8 +164,14 @@ static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf) {
 }
 
 static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *expression) {
-    char *expr_copy = ngx_pstrdup(r->pool, expression);
-    char *token = strtok(expr_copy, " ");
+    char *expr = ngx_pnalloc(r->pool, strlen(expression) + 1);
+    if (expr == NULL) {
+        return false;
+    }
+
+    ngx_memcpy(expr, expression, strlen(expression) + 1);
+
+    char *token = strtok(expr, " ");
 
     bool result = false;
     bool current_value = false;
@@ -192,15 +198,18 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
 }
 
 static bool eval_condition(ngx_http_request_t *r, const char *condition) {
-    char *cond_copy = ngx_pstrdup(r->pool, condition + 1);
-    cond_copy[strlen(cond_copy) - 1] = '\0';
+    char *cond = ngx_pnalloc(r->pool, strlen(condition));
+    if (cond == NULL) {
+        return false;
+    }
+    cond[strlen(cond) - 1] = '\0';
 
-    if (strstr(cond_copy, "http.user_agent contains") != NULL) {
-        char *value = strstr(cond_copy, "\"") + 1;
+    if (strstr(cond, "http.user_agent contains") != NULL) {
+        char *value = strstr(cond, "\"") + 1;
         value[strlen(value) - 1] = '\0';
         return check_user_agent(r, value);
-    } else if (strstr(cond_copy, "ip.src eq") != NULL) {
-        char *value = strstr(cond_copy, "eq") + 3;
+    } else if (strstr(cond, "ip.src eq") != NULL) {
+        char *value = strstr(cond, "eq") + 3;
         return check_ip(r, value);
     }
 
@@ -211,7 +220,7 @@ static bool check_user_agent(ngx_http_request_t *r, const char *value) {
     ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
     ngx_str_t *user_agent = user_agent_header ? &user_agent_header->value : NULL;
 
-    if (user_agent && ngx_strcasestrn(user_agent->data, (u_char *)value, ngx_strlen(value) - 1) != NULL) {
+    if (user_agent && ngx_strcasestrn(user_agent->data, (char *)value, ngx_strlen(value) - 1) != NULL) {
         return true;
     }
     return false;
