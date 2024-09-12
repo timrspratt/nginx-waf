@@ -3,6 +3,19 @@
 #include <ngx_http.h>
 #include <string.h>
 
+#define HTML_TEMPLATE \
+        "<!DOCTYPE html>" \
+        "<html>" \
+        "<head>" \
+        "<meta charset='UTF-8'>" \
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" \
+        "<title>%s</title>" \
+        "</head>" \
+        "<body>" \
+        "%s" \
+        "</body>" \
+        "</html>"
+
 // Structure to hold configuration
 typedef struct {
     ngx_str_t expression;  // Store the blocking expression
@@ -89,11 +102,39 @@ static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *c
     return NGX_CONF_OK;
 }
 
+int serve_response(ngx_http_request_t *r, ngx_http_waf_config_t *conf) {
+    ngx_buf_t *b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+    ngx_chain_t out;
+
+    unsigned char buf[32768];
+    static const ngx_str_t content_type = ngx_string("text/html;charset=utf-8");
+
+    size_t size = snprintf((char *) buf, sizeof(buf), HTML_TEMPLATE, "WAF", "<h2>WAF</h2>");
+
+    out.buf = b;
+    out.next = NULL;
+
+    b->pos = buf;
+    b->last = buf + size;
+    b->memory = 1;
+    b->last_buf = 1;
+
+    r->headers_out.status = conf->status;
+    r->headers_out.content_length_n = size;
+    r->headers_out.content_type = content_type;
+    ngx_http_send_header(r);
+
+    ngx_http_output_filter(r, &out);
+    ngx_http_finalize_request(r, 0);
+
+    return NGX_DONE;
+}
+
 // Main handler to process requests and evaluate the block expression
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
     ngx_http_waf_config_t *conf;
     conf = ngx_http_get_module_loc_conf(r, ngx_http_waf_module);
-
+return serve_response(r, conf);
     // If no expression is configured, allow the request
     if (conf->expression.len == 0) {
         return NGX_DECLINED;
