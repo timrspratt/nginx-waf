@@ -29,20 +29,20 @@ static ngx_command_t ngx_http_waf_commands[] = {
 // Define the module context
 static ngx_http_module_t ngx_http_waf_module_ctx = {
     NULL,                               // preconfiguration
-    NULL,                               // postconfiguration
+    ngx_http_block_init,                // postconfiguration
     NULL,                               // create main configuration
     NULL,                               // init main configuration
     NULL,                               // create server configuration
     NULL,                               // merge server configuration
-    ngx_http_waf_create_loc_conf,     // create location configuration
+    ngx_http_waf_create_loc_conf,       // create location configuration
     NULL                                // merge location configuration
 };
 
 // Define the module itself
 ngx_module_t ngx_http_waf_module = {
     NGX_MODULE_V1,
-    &ngx_http_waf_module_ctx,         // Module context
-    ngx_http_waf_commands,            // Module directives
+    &ngx_http_waf_module_ctx,           // Module context
+    ngx_http_waf_commands,              // Module directives
     NGX_HTTP_MODULE,                    // Module type
     NULL,                               // Init master
     NULL,                               // Init module
@@ -90,7 +90,7 @@ static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *c
 
 // Helper function to check if a substring exists in a string (case-insensitive)
 static ngx_int_t ngx_str_contains(ngx_str_t *haystack, const char *needle) {
-    if (ngx_strcasestrn(haystack->data, needle, ngx_strlen(needle) - 1) != NULL) {
+    if (ngx_strcasestrn(haystack->data, (u_char *)needle, ngx_strlen(needle) - 1) != NULL) {
         return 1;  // found
     }
     return 0;  // not found
