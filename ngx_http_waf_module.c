@@ -202,7 +202,9 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
     if (cond == NULL) {
         return false;
     }
-    cond[strlen(cond) - 1] = '\0';
+
+    ngx_memcpy(cond, condition + 1, strlen(condition) - 2);
+    cond[strlen(condition) - 2] = '\0';
 
     if (strstr(cond, "http.user_agent contains") != NULL) {
         char *value = strstr(cond, "\"") + 1;
