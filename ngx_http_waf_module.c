@@ -132,10 +132,11 @@ int serve_response(ngx_http_request_t *r, ngx_http_waf_config_t *conf) {
 
 // Main handler to process requests and evaluate the block expression
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
-    ngx_http_waf_config_t *conf;
-    conf = ngx_http_get_module_loc_conf(r, ngx_http_waf_module);
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[ waf ] here");
-return serve_response(r, conf);
+    ngx_http_waf_config_t *conf = ngx_http_get_module_loc_conf(r, ngx_http_waf_module);
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[ waf ] here");
+    
+    return serve_response(r, conf);
+
     // If no expression is configured, allow the request
     if (conf->expression.len == 0) {
         return NGX_DECLINED;
@@ -163,10 +164,16 @@ return serve_response(r, conf);
 
 // Register the handler to run in the access phase
 static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf) {
-    ngx_http_core_loc_conf_t *clcf;
+    ngx_http_handler_pt *h;
+    ngx_http_core_main_conf_t *main_conf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
 
-    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-    clcf->handler = ngx_http_waf_handler;
+    h = ngx_array_push(&main_conf->phases[NGX_HTTP_PRECONTENT_PHASE].handlers);
+    if (h == NULL) {
+        ngx_log_error(NGX_LOG_ERR, cf->log, 0, "null");
+        return NGX_ERROR;
+    }
+
+    *h = ngx_http_waf_handler;
 
     return NGX_OK;
 }
