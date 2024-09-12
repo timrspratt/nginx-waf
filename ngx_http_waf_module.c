@@ -89,14 +89,6 @@ static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *c
     return NGX_CONF_OK;
 }
 
-// Helper function to check if a substring exists in a string (case-insensitive)
-static ngx_int_t ngx_str_contains(ngx_str_t *haystack, const char *needle) {
-    if (ngx_strcasestrn(haystack->data, (char *)needle, ngx_strlen(needle) - 1) != NULL) {
-        return 1;  // found
-    }
-    return 0;  // not found
-}
-
 // Main handler to process requests and evaluate the block expression
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
     ngx_http_waf_config_t *conf;
@@ -115,10 +107,7 @@ static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
     // This is a simple parser for AND/OR conditions, split by ' or ' or ' and '
     // You may expand this for full expression parsing (e.g., precedence)
     if (user_agent) {
-        // Evaluate block conditions based on the expression (you can make this more dynamic)
-        if (ngx_str_contains(user_agent, "test")) {
-            return conf->status;  // Return the configured status code
-        }
+        return conf->status;
     }
 
     // Example condition based on IP address (can be configured similarly)
