@@ -2,6 +2,8 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
 
 #define HTML_TEMPLATE \
         "<!DOCTYPE html>" \
