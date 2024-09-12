@@ -132,7 +132,6 @@ static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
 
     ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
     ngx_str_t *user_agent = user_agent_header ? &user_agent_header->value : NULL;
-    ngx_str_t remote_addr = r->connection->addr_text;
 
     if (user_agent) {
         return serve_response(r, conf);
