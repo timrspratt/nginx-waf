@@ -6,6 +6,6 @@ if test -n "$ngx_module_link"; then
   ngx_module_srcs="$ngx_addon_dir/ngx_http_waf_module.c"
   . auto/module
 else
-	HTTP_MODULES="$HTTP_MODULES ngx_http_waf_module"
-	NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_waf_module.c"
+  HTTP_MODULES="$HTTP_MODULES ngx_http_waf_module"
+  NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_waf_module.c"
 fi
