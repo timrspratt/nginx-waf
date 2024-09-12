@@ -204,10 +204,10 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
     if (strstr(condition, "http.user_agent contains") != NULL) {
         char *value = strstr(condition, "\"") + 1;
         value[strlen(value) - 1] = '\0';
-        return check_user_agent(r, value);
+        return false;
     } else if (strstr(condition, "ip.src eq") != NULL) {
         char *value = strstr(condition, "eq") + 3;
-        return check_ip(r, value);
+        return false;
     }
 
     return false;
