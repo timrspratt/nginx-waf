@@ -12,6 +12,7 @@ typedef struct {
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r);
 static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void *ngx_http_waf_create_loc_conf(ngx_conf_t *cf);
+static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf);
 
 // Define the module directives
 static ngx_command_t ngx_http_waf_commands[] = {
