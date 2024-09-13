@@ -209,6 +209,19 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
 }
 
 static bool check_user_agent(ngx_http_request_t *r, const char *value) {
-        ngx_log_error(NGX_LOG_EMERG, r->connection->log, 0, value);
-    return true;
+    ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
+
+    if (user_agent_header == NULL) {
+        return false;
+    }
+
+    ngx_str_t *user_agent = &user_agent_header->value;
+
+    u_char *ngx_value = (u_char *) value;
+
+    if (ngx_strcasestrn(user_agent->data, ngx_value, ngx_strlen(value) - 1) != NULL) {
+        return true;
+    }
+
+    return false;
 }
