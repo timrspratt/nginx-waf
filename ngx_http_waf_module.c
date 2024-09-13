@@ -209,5 +209,6 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
 }
 
 static bool check_user_agent(ngx_http_request_t *r, const char *value) {
-    return false;
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, value);
+    return true;
 }
