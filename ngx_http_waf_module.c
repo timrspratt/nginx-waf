@@ -209,6 +209,6 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
 }
 
 static bool check_user_agent(ngx_http_request_t *r, const char *value) {
-        ngx_conf_log_error(NGX_LOG_EMERG, r->connection->log, 0, value);
+        ngx_log_error(NGX_LOG_EMERG, r->connection->log, 0, value);
     return true;
 }
