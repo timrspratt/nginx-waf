@@ -301,6 +301,8 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
         return false;
     }
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[ debug ] %s", value);
+
     if (strcmp(action, "http.user_agent") == 0) {
         bool result;
         if (strcmp(operator, "contains") == 0) {
