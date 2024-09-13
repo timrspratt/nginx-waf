@@ -20,12 +20,17 @@
 
 typedef struct {
     ngx_array_t *rules;
+    unsigned int processed:1;
 } ngx_http_waf_conf_t;
 
 typedef struct {
     ngx_str_t expression;
     ngx_int_t status;
 } ngx_http_waf_rule_t;
+
+typedef struct {
+    unsigned int processed:1;
+} ngx_http_waf_ctx_t;
 
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r);
 static char *ngx_http_waf_expressions(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
@@ -180,6 +185,26 @@ int serve_response(ngx_http_request_t *r, ngx_http_waf_rule_t *conf) {
 }
 
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
+    if (r != r->main || r->internal) {
+        return NGX_DECLINED;
+    }
+
+    ngx_http_waf_ctx_t *ctx;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_http_waf_module);
+
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_waf_ctx_t));
+        if (ctx == NULL) {
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+        ngx_http_set_ctx(r, ctx, ngx_http_waf_module);
+    }
+
+    if (ctx->processed) {
+        return NGX_DECLINED;
+    }
+
     ngx_http_waf_conf_t *conf;
     ngx_http_waf_rule_t *rules;
     ngx_uint_t i;
@@ -190,7 +215,11 @@ static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
         return NGX_DECLINED;
     }
 
+    ctx->processed = 1;
+
     rules = conf->rules->elts;
+
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[ waf ] running");
 
     for (i = 0; i < conf->rules->nelts; i++) {
         ngx_http_waf_rule_t rule = rules[i];
@@ -209,7 +238,6 @@ static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf) {
 
     h = ngx_array_push(&main_conf->phases[NGX_HTTP_PRECONTENT_PHASE].handlers);
     if (h == NULL) {
-        ngx_log_error(NGX_LOG_ERR, cf->log, 0, "null");
         return NGX_ERROR;
     }
 
@@ -255,28 +283,53 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
 }
 
 bool extract_quoted_value(const char *condition, char *value, size_t value_size) {
-    const char *start = strchr(condition, '\'');
+    if (condition == NULL || value == NULL || value_size == 0) {
+        return false;
+    }
+
+    const char *start = NULL;
+    const char *end = NULL;
+    const char *p = condition;
+
+    while (*p != '\0') {
+        if (*p == '\'') {
+            start = p + 1;
+            break;
+        }
+        p++;
+    }
+
     if (start == NULL) {
         return false;
     }
-    start++;
 
-    const char *end = start;
-    size_t len = 0;
-
-    while (*end != '\0' && len < value_size - 1) {
-        if (*end == '\'' && (end == start || *(end - 1) != '\\')) {
+    for (p = start; *p != '\0'; p++) {
+        if (*p == '\'' && (*(p - 1) != '\\')) {
+            end = p;
             break;
         }
-        value[len++] = *end;
-        end++;
     }
 
-    if (*end != '\'') {
+    if (end == NULL) {
         return false;
     }
 
-    value[len] = '\0';
+    size_t length = 0;
+    for (p = start; p < end && length < value_size - 1; p++) {
+        if (*p == '\\' && (*(p + 1) == '\'')) {
+            value[length++] = '\'';
+            p++;
+        } else {
+            value[length++] = *p;
+        }
+    }
+
+    if (length >= value_size - 1 && p < end) {
+        return false;
+    }
+
+    value[length] = '\0';
+
     return true;
 }
 
@@ -300,8 +353,6 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
     if (!extract_quoted_value(condition, value, sizeof(value))) {
         return false;
     }
-
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[ debug ] %s", value);
 
     if (strcmp(action, "http.user_agent") == 0) {
         bool result;
