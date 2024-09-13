@@ -19,28 +19,37 @@
         "</html>"
 
 typedef struct {
+    ngx_array_t *rules;
+} ngx_http_waf_conf_t;
+
+typedef struct {
     ngx_str_t expression;
     ngx_int_t status;
-} ngx_http_waf_config_t;
+} ngx_http_waf_rule_t;
 
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r);
+static char *ngx_http_waf_expressions(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void *ngx_http_waf_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_waf_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf);
 
+int serve_response(ngx_http_request_t *r, ngx_http_waf_rule_t *conf);
+
 static bool eval_condition(ngx_http_request_t *r, const char *condition);
 static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *expression);
+bool extract_quoted_value(const char *condition, char *value, size_t value_size);
 
-static bool check_user_agent(ngx_http_request_t *r, const char *value);
+static bool check_user_agent_contains(ngx_http_request_t *r, const char *value);
+static bool check_user_agent_equals(ngx_http_request_t *r, const char *value);
 
 static ngx_command_t ngx_http_waf_commands[] = {
     {
-        ngx_string("waf_rule"),
-        NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE2,
-        ngx_http_waf_expression,
+        ngx_string("waf_rules"),
+        NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS | NGX_CONF_BLOCK,
+        ngx_http_waf_expressions,
         NGX_HTTP_LOC_CONF_OFFSET,
-        offsetof(ngx_http_waf_config_t, expression),
+        0,
         NULL
     },
     ngx_null_command
@@ -73,47 +82,76 @@ ngx_module_t ngx_http_waf_module = {
 };
 
 static void *ngx_http_waf_create_loc_conf(ngx_conf_t *cf) {
-    ngx_http_waf_config_t *conf;
+    ngx_http_waf_conf_t *conf;
 
-    conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_waf_config_t));
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_waf_conf_t));
     if (conf == NULL) {
         return NGX_CONF_ERROR;
     }
-
-    conf->expression = (ngx_str_t) {0, NULL};
-    conf->status = NGX_HTTP_FORBIDDEN;
 
     return conf;
 }
 
 static char *ngx_http_waf_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) {
-    ngx_http_waf_config_t *prev = parent;
-    ngx_http_waf_config_t *conf = child;
+    ngx_http_waf_conf_t *prev = parent;
+    ngx_http_waf_conf_t *conf = child;
 
-    ngx_conf_merge_str_value(conf->expression, prev->expression, NULL);
-    ngx_conf_merge_value(conf->status, prev->status, NGX_HTTP_FORBIDDEN);
+    if (conf->rules == NULL) {
+        conf->rules = prev->rules;
+    }
 
     return NGX_CONF_OK;
+}
+
+static char *ngx_http_waf_expressions(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+    ngx_conf_t save = *cf;
+
+    cf->handler = ngx_http_waf_expression;
+    cf->handler_conf = conf;
+
+    char *rv = ngx_conf_parse(cf, NULL);
+
+    *cf = save;
+
+    return rv;
 }
 
 static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
-    ngx_http_waf_config_t *block_conf = conf;
+    ngx_http_waf_conf_t *mlcf = conf;
     ngx_str_t *value = cf->args->elts;
 
-    block_conf->expression = value[1];
-
-    ngx_int_t status = ngx_atoi(value[2].data, value[2].len);
-    if (status == NGX_ERROR || status < 100 || status > 599) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "Invalid status code in expression");
+    if (cf->args->nelts != 2) {
         return NGX_CONF_ERROR;
     }
 
-    block_conf->status = status;
+    if (mlcf->rules == NULL) {
+        mlcf->rules = ngx_array_create(cf->pool, 4, sizeof(ngx_http_waf_rule_t));
+        if (mlcf->rules == NULL) {
+            return NGX_CONF_ERROR;
+        }
+    }
+
+    ngx_http_waf_rule_t *rule = ngx_array_push(mlcf->rules);
+
+    if (rule == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    rule->expression = value[0];
+    rule->status = ngx_atoi(value[1].data, value[1].len);
+
+    if (rule->status == NGX_ERROR) {
+        return "waf_rules directive invalid status code";
+    }
+
+    if (rule->status < 100 || rule->status > 599) {
+        return "waf_rules directive invalid HTTP status code, must be between 100 and 599";
+    }
 
     return NGX_CONF_OK;
 }
 
-int serve_response(ngx_http_request_t *r, ngx_http_waf_config_t *conf) {
+int serve_response(ngx_http_request_t *r, ngx_http_waf_rule_t *conf) {
     ngx_buf_t *b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     ngx_chain_t out;
 
@@ -142,18 +180,24 @@ int serve_response(ngx_http_request_t *r, ngx_http_waf_config_t *conf) {
 }
 
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
-    ngx_http_waf_config_t *conf = ngx_http_get_module_loc_conf(r, ngx_http_waf_module);
+    ngx_http_waf_conf_t *conf;
+    ngx_http_waf_rule_t *rules;
+    ngx_uint_t i;
 
-    if (conf->expression.len == 0) {
+    conf = ngx_http_get_module_loc_conf(r, ngx_http_waf_module);
+
+    if (conf->rules == NULL) {
         return NGX_DECLINED;
     }
 
-    char expression[conf->expression.len + 1];
-    ngx_memcpy(expression, conf->expression.data, conf->expression.len);
-    expression[conf->expression.len] = '\0';
+    rules = conf->rules->elts;
 
-    if (parse_and_evaluate_expression(r, expression)) {
-        return serve_response(r, conf);
+    for (i = 0; i < conf->rules->nelts; i++) {
+        ngx_http_waf_rule_t rule = rules[i];
+
+        if (parse_and_evaluate_expression(r, (char *) rule.expression.data)) {
+            return serve_response(r, &rule);
+        }
     }
 
     return NGX_DECLINED;
@@ -210,16 +254,76 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
     return result;
 }
 
-static bool eval_condition(ngx_http_request_t *r, const char *condition) {
-    if (strstr(condition, "http.user_agent contains") != NULL) {
-        char *value = strstr(condition, "\"") + 1;
-        value[strlen(value) - 1] = '\0';
-        return check_user_agent(r, value);
+bool extract_quoted_value(const char *condition, char *value, size_t value_size) {
+    const char *start = strchr(condition, '\'');
+    if (start == NULL) {
+        return false;
     }
+    start++;
+
+    const char *end = start;
+    size_t len = 0;
+
+    while (*end != '\0' && len < value_size - 1) {
+        if (*end == '\'' && (end == start || *(end - 1) != '\\')) {
+            break;
+        }
+        value[len++] = *end;
+        end++;
+    }
+
+    if (*end != '\'') {
+        return false;
+    }
+
+    value[len] = '\0';
+    return true;
+}
+
+static bool eval_condition(ngx_http_request_t *r, const char *condition) {
+    bool invert = false;
+
+    if (strncmp(condition, "not ", 4) == 0) {
+        invert = true;
+        condition += 4;
+    }
+
+    char action[256];
+    char operator[16];
+    char value[256];
+    //char key[256];
+
+    if (sscanf(condition, "%s %s", action, operator) != 2) {
+        return false;
+    }
+
+    if (!extract_quoted_value(condition, value, sizeof(value))) {
+        return false;
+    }
+
+    if (strcmp(action, "http.user_agent") == 0) {
+        bool result;
+        if (strcmp(operator, "contains") == 0) {
+            result = check_user_agent_contains(r, value);
+        } else if (strcmp(operator, "eq") == 0) {
+            result = check_user_agent_equals(r, value);
+        } else {
+            return false;
+        }
+        return invert ? !result : result;
+    }
+    /*else if (strcmp(action, "http.cookie") == 0) {
+
+    } else if (sscanf(condition, "http.request.headers[%255] %s \"%255[^\"]\"", key, operator, value) == 3) {
+
+    } else if (sscanf(condition, "http.request.cookies[%255] %s \"%255[^\"]\"", key, operator, value) == 3) {
+
+    }*/
+
     return false;
 }
 
-static bool check_user_agent(ngx_http_request_t *r, const char *value) {
+static bool check_user_agent_contains(ngx_http_request_t *r, const char *value) {
     ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
 
     if (user_agent_header == NULL) {
@@ -229,6 +333,22 @@ static bool check_user_agent(ngx_http_request_t *r, const char *value) {
     u_char *user_agent = user_agent_header->value.data;
 
     if (ngx_strcasestrn(user_agent, (char *) value, ngx_strlen(value) - 1) != NULL) {
+        return true;
+    }
+
+    return false;
+}
+
+static bool check_user_agent_equals(ngx_http_request_t *r, const char *value) {
+    ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
+
+    if (user_agent_header == NULL) {
+        return false;
+    }
+
+    ngx_str_t *user_agent = &user_agent_header->value;
+
+    if (ngx_strcasecmp(user_agent->data, (u_char *) value) == 0) {
         return true;
     }
 
