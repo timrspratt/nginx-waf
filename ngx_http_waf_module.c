@@ -30,8 +30,6 @@ static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf);
 
 static bool eval_condition(ngx_http_request_t *r, const char *condition);
 static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *expression);
-static bool check_user_agent(ngx_http_request_t *r, const char *value);
-static bool check_ip(ngx_http_request_t *r, const char *value);
 
 static ngx_command_t ngx_http_waf_commands[] = {
     {
@@ -201,25 +199,5 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
 }
 
 static bool eval_condition(ngx_http_request_t *r, const char *condition) {
-    return false;
-}
-
-static bool check_user_agent(ngx_http_request_t *r, const char *value) {
-    ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
-    ngx_str_t *user_agent = user_agent_header ? &user_agent_header->value : NULL;
-
-    if (user_agent && ngx_strcasestrn(user_agent->data, (char *)value, ngx_strlen(value) - 1) != NULL) {
-        return true;
-    }
-    return false;
-}
-
-static bool check_ip(ngx_http_request_t *r, const char *value) {
-    ngx_str_t remote_addr = r->connection->addr_text;
-
-    if (ngx_strcmp(remote_addr.data, value) == 0) {
-        return true;
-    }
-
     return false;
 }
