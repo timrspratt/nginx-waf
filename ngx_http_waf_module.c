@@ -219,8 +219,6 @@ static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r) {
 
     rules = conf->rules->elts;
 
-    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[ waf ] running");
-
     for (i = 0; i < conf->rules->nelts; i++) {
         ngx_http_waf_rule_t rule = rules[i];
 
