@@ -26,6 +26,7 @@ typedef struct {
 static ngx_int_t ngx_http_waf_handler(ngx_http_request_t *r);
 static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void *ngx_http_waf_create_loc_conf(ngx_conf_t *cf);
+static char *ngx_http_waf_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 static ngx_int_t ngx_http_waf_init(ngx_conf_t *cf);
 
 static bool eval_condition(ngx_http_request_t *r, const char *condition);
@@ -53,7 +54,7 @@ static ngx_http_module_t ngx_http_waf_module_ctx = {
     NULL,                               // create server configuration
     NULL,                               // merge server configuration
     ngx_http_waf_create_loc_conf,       // create location configuration
-    NULL                                // merge location configuration
+    ngx_http_waf_merge_loc_conf         // merge location configuration
 };
 
 ngx_module_t ngx_http_waf_module = {
@@ -83,6 +84,16 @@ static void *ngx_http_waf_create_loc_conf(ngx_conf_t *cf) {
     conf->status = NGX_HTTP_FORBIDDEN;
 
     return conf;
+}
+
+static char *ngx_http_waf_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) {
+    ngx_http_waf_config_t *prev = parent;
+    ngx_http_waf_config_t *conf = child;
+
+    ngx_conf_merge_str_value(conf->expression, prev->expression, NULL);
+    ngx_conf_merge_uint_value(conf->status, prev->status, NGX_HTTP_FORBIDDEN);
+
+    return NGX_CONF_OK;
 }
 
 static char *ngx_http_waf_expression(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
