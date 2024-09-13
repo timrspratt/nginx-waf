@@ -201,15 +201,6 @@ static bool parse_and_evaluate_expression(ngx_http_request_t *r, const char *exp
 }
 
 static bool eval_condition(ngx_http_request_t *r, const char *condition) {
-    if (strstr(condition, "http.user_agent contains") != NULL) {
-        char *value = strstr(condition, "\"") + 1;
-        value[strlen(value) - 1] = '\0';
-        return false;
-    } else if (strstr(condition, "ip.src eq") != NULL) {
-        char *value = strstr(condition, "eq") + 3;
-        return false;
-    }
-
     return false;
 }
 
