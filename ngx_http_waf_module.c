@@ -217,9 +217,7 @@ static bool check_user_agent(ngx_http_request_t *r, const char *value) {
 
     ngx_str_t *user_agent = &user_agent_header->value;
 
-    u_char *ngx_value = (u_char *) value;
-
-    if (ngx_strcasestrn(user_agent->data, ngx_value, ngx_strlen(value) - 1) != NULL) {
+    if (ngx_strcasestrn(user_agent, (char *) value, ngx_strlen(value) - 1) != NULL) {
         return true;
     }
 
