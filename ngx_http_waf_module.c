@@ -209,11 +209,5 @@ static bool eval_condition(ngx_http_request_t *r, const char *condition) {
 }
 
 static bool check_user_agent(ngx_http_request_t *r, const char *value) {
-    ngx_table_elt_t *user_agent_header = r->headers_in.user_agent;
-    ngx_str_t *user_agent = user_agent_header ? &user_agent_header->value : NULL;
-
-    if (user_agent && ngx_strcasestrn(user_agent->data, (char *)value, ngx_strlen(value) - 1) != NULL) {
-        return true;
-    }
-    return false;
+    return true;
 }
