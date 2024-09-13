@@ -91,7 +91,7 @@ static char *ngx_http_waf_merge_loc_conf(ngx_conf_t *cf, void *parent, void *chi
     ngx_http_waf_config_t *conf = child;
 
     ngx_conf_merge_str_value(conf->expression, prev->expression, NULL);
-    ngx_conf_merge_uint_value(conf->status, prev->status, NGX_HTTP_FORBIDDEN);
+    ngx_conf_merge_int_value(conf->status, prev->status, NGX_HTTP_FORBIDDEN);
 
     return NGX_CONF_OK;
 }
