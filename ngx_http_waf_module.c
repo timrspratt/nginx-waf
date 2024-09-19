@@ -381,7 +381,6 @@ int serve_response(ngx_http_request_t *r, ngx_http_waf_rule_t *rule) {
 }
 
 int serve_challenge(ngx_http_request_t *r, const char *challenge) {
-    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[ js challenge ] serving... ");
     ngx_buf_t *b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     ngx_chain_t out;
 
