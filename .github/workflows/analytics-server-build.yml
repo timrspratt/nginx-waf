@@ -42,7 +42,7 @@ jobs:
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }} ./analytics-server.go
 
       - name: Upload build artifacts for ${{ matrix.goarch }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -52,7 +52,7 @@ jobs:
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
-          asset_name: analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.event.release.tag_name }}
+          asset_name: analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
           asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
