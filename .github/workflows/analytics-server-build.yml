@@ -1,0 +1,56 @@
+name: Build analytics-server
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build analytics-server for multiple architectures
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            /go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: Build for ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }} ./analytics-server.go
+
+      - name: Upload build artifacts for ${{ matrix.goarch }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          asset_name: analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.event.release.tag_name }}
+          asset_content_type: application/octet-stream
