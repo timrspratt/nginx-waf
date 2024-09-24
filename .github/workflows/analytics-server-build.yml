@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: Build analytics-server for multiple architectures
+    name: Build analytics-server
     runs-on: ubuntu-latest
 
     strategy:
@@ -54,3 +54,5 @@ jobs:
           asset_path: ./dist/analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}
           asset_name: analytics-server-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.event.release.tag_name }}
           asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
